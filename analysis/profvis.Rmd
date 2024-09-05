@@ -1,0 +1,28 @@
+---
+title: "Using profvis on single effect regression"
+author: "Haoyu"
+date: "9/05/24"
+output: html_document
+---
+
+To use the profvis package on single_effect_regression().
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+### Motivation or Aims
+
+To determine what lines of code in the single_effect_regression() function take the longest time to run. This helps with choosing what lines of code to focus on during future implementation of the Rcpp package to cut down on runtime.
+
+### Methods Overview
+
+The profvis package provides a flame graph and a chart depicting the runtime for each line of code, as long as the runtime is significant enough (\> 10 ms). With more iterations, it becomes clear which lines of code consistently take the longest amount of runtime.
+
+### Main Conclusions
+
+Calculating log(bf) for each SNP takes the longest amount of time by a considerable amount, followed by computing Xty using the compute_Xty() function, followed by computing betahat. These three lines of code consistently stand out as taking the longest. Additionally, the profvis package includes a column about memory usage, and these 3 lines of code consume the most memory as well.
+
+### Detailed Steps
+
+Install the profvis package. Create a file for the single_effect_regression() code. Then, source this file in the code, which creates a better connection between profiling data and source code. Lastly, apply the profvis() function (i.e. profvis(function(arguments))). If there is an error regarding the code being too fast, you might have to iterate it multiple times.
