@@ -9,6 +9,8 @@ To use the profvis package on single_effect_regression().
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
+library(profvis)
+library(htmlwidgets)
 ```
 
 ### Motivation or Aims
@@ -23,8 +25,7 @@ The profvis package provides a flame graph and a chart depicting the runtime for
 
 Calculating log(bf) for each SNP takes the longest amount of time by a considerable amount, followed by computing Xty using the compute_Xty() function, followed by computing betahat. These three lines of code consistently stand out as taking the longest. Additionally, the profvis package includes a column about memory usage, and these 3 lines of code consume the most memory as well.
 
-```{r}
-library(profvis)
+```{r, results='asis'}
 set.seed(123)  # for reproducibility
 n <- 1000  # number of observations
 p <- 100   # number of predictors
