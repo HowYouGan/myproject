@@ -41,13 +41,13 @@ attr(X, "d") <- rep(1, ncol(X))
 V <- 1
 
 source(here::here("CopyOfSER4.R"))
-profvis({
-  pause(0.1)
+prof <- profvis({
+  pause(0.5)
   for (i in 1:10000) {  # Run multiple times to get more data
     result <- single_effect_regression(y, X, V)
   }
 })
-
+print(prof)
 ```
 
 ### Detailed Steps
