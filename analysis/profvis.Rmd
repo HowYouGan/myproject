@@ -10,7 +10,6 @@ To use the profvis package on single_effect_regression().
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
 library(profvis)
-library(htmlwidgets)
 ```
 
 ### Motivation or Aims
@@ -19,37 +18,115 @@ To determine what lines of code in the single_effect_regression() function take 
 
 ### Methods Overview
 
-The profvis package provides a flame graph and a chart depicting the runtime for each line of code, as long as the runtime is significant enough (\> 10 ms). With more iterations, it becomes clear which lines of code consistently take the longest amount of runtime.
+The profvis package provides a flame graph and a chart depicting the runtime for each line of code, as long as the runtime is significant enough (\> 10 ms). With more iterations, it becomes clear which lines of code consistently take the longest amount of runtime. Profvis is pretty consistent, but rerunning the profvis command multiple times may be helpful to get a clearer picture.
 
 ### Main Conclusions
 
-Calculating log(bf) for each SNP takes the longest amount of time by a considerable amount, followed by computing Xty using the compute_Xty() function, followed by computing betahat. These three lines of code consistently stand out as taking the longest. Additionally, the profvis package includes a column about memory usage, and these 3 lines of code consume the most memory as well.
+The compute_Xty() function takes the longest time to run by a significant margin, followed by the loglik() function. Within the compute_Xty() function, the crossprod() function and the "if (!is.null(attr(X,"matrix.type")))" have the longest runtime.
 
-```{r, results='asis'}
-set.seed(123)  # for reproducibility
-n <- 1000  # number of observations
-p <- 100   # number of predictors
-X <- matrix(rnorm(n * p), nrow = n)
-y <- rnorm(n)
+```{r}
+X <- readRDS("/Users/haoyugan/Documents/myproject /X6")
+X <- scale(X, center = T, scale = T)
+n <- nrow(X) # number of individuals
+p <- ncol(X) # number of variants
 
-# Add necessary attributes to X
-attr(X, "scaled:center") <- colMeans(X)
-attr(X, "scaled:scale") <- apply(X, 2, sd)
-attr(X, "d") <- rep(1, ncol(X))
+Ltrue <- 5 # number of true effects
+ssq <- 0.01 # variance of true effects
+sigmasq <- 1 # residual variance
 
-# Set a value for V
-V <- 1
+b <- rep(0, p) # initialize p-vector 
+inds <- sample(p, Ltrue, replace = FALSE) # identify indices for true effects
+b[inds] <- rnorm(Ltrue) * sqrt(ssq) # create true effects
 
-source(here::here("CopyOfSER4.R"))
-prof <- profvis({
-  pause(0.5)
-  for (i in 1:10000) {  # Run multiple times to get more data
+
+y <- X %*% b + rnorm(n) * sqrt(sigmasq) # generate outcome using our X and some residual noise
+y <- scale(y, center = T, scale = F)
+
+V <- 0.05
+
+# Run profvis. Outside of knitting, code like "source(here::here("/Users/haoyugan/Documents/CopyOfSER4.R"))" works, but for some reason profvis doesn't work well when knitting. 
+profvis({ 
+
+out = susieR:::compute_colstats(X, center = TRUE, scale = TRUE)
+attr(X,"scaled:center") = out$cm
+attr(X,"scaled:scale") = out$csd
+attr(X,"d") = out$d
+
+compute_Xty = function (X, y) {
+
+  cm = attr(X,"scaled:center")
+  csd = attr(X,"scaled:scale")
+  ytX = crossprod(y,X)
+  # Scale Xty.
+  if (!is.null(attr(X,"matrix.type")))
+
+    # When X is a trend filtering matrix.
+    scaled.Xty = compute_tf_Xty(attr(X,"order"),y)/csd
+  else
+
+    # When X is an ordinary sparse/dense matrix.
+    scaled.Xty = t(ytX/csd)
+
+  # Center Xty.
+  centered.scaled.Xty = scaled.Xty - cm/csd * sum(y)
+  return(as.numeric(centered.scaled.Xty))
+}
+
+single_effect_regression =
+  function (y, X, V, residual_variance = 1, prior_weights = NULL,
+            optimize_V = c("none", "optim", "uniroot", "EM", "simple"),
+            check_null_threshold = 0) {
+
+    optimize_V = match.arg(optimize_V)
+    Xty = compute_Xty(X,y)
+    betahat = (1/attr(X,"d")) * Xty
+    shat2 = residual_variance/attr(X,"d")
+    if (is.null(prior_weights))
+      prior_weights = rep(1/ncol(X),ncol(X))
+    if (optimize_V != "EM" && optimize_V != "none")
+      V = optimize_prior_variance(optimize_V,betahat,shat2,prior_weights,
+                                  alpha = NULL,post_mean2 = NULL,V_init = V,
+                                  check_null_threshold = check_null_threshold)
+
+    # log(bf) for each SNP
+    lbf = dnorm(betahat,0,sqrt(V + shat2),log = TRUE) -
+      dnorm(betahat,0,sqrt(shat2),log = TRUE)
+
+    # Deal with special case of infinite shat2 (e.g., happens if X does
+    # not vary).
+    lbf[is.infinite(shat2)] = 0
+    maxlbf = max(lbf)
+
+    # w is proportional to BF, but subtract max for numerical stability.
+    w = exp(lbf - maxlbf)
+
+    # Posterior prob for each SNP.
+    w_weighted = w * prior_weights
+    weighted_sum_w = sum(w_weighted)
+    alpha = w_weighted / weighted_sum_w
+    post_var = (1/V + attr(X,"d")/residual_variance)^(-1) # Posterior variance.
+    post_mean = (1/residual_variance) * post_var * Xty
+    post_mean2 = post_var + post_mean^2 # Second moment.
+
+    # BF for single effect model.
+    lbf_model = maxlbf + log(weighted_sum_w)
+    loglik = lbf_model + sum(dnorm(y,0,sqrt(residual_variance),log = TRUE))
+
+    if(optimize_V == "EM")
+      V = optimize_prior_variance(optimize_V,betahat,shat2,prior_weights,
+                                  alpha,post_mean2,
+                                  check_null_threshold = check_null_threshold)
+
+    return(list(alpha = alpha,mu = post_mean,mu2 = post_mean2,lbf = lbf,
+                lbf_model = lbf_model,V = V,loglik = loglik))
+  }
+  for (i in 1:1000) { #Run more times in order to create more runtime which is helpful to collect more data
     result <- single_effect_regression(y, X, V)
   }
 })
-print(prof)
 ```
 
 ### Detailed Steps
 
 Install the profvis package. Create a file for the single_effect_regression() code. Then, source this file in the code, which creates a better connection between profiling data and source code. Lastly, apply the profvis() function (i.e. profvis(function(arguments))). If there is an error regarding the code being too fast, you might have to iterate it multiple times.
+When knitting an Rmd file, the sourcing doesn't seem to work as well and you might have to just include the actual code within the profvis command and run it. 
