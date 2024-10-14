@@ -120,7 +120,7 @@ single_effect_regression =
     return(list(alpha = alpha,mu = post_mean,mu2 = post_mean2,lbf = lbf,
                 lbf_model = lbf_model,V = V,loglik = loglik))
   }
-  for (i in 1:1000) { #Run more times in order to create more runtime which is helpful to collect more data
+  for (i in 1:10000) { #Run more times in order to create more runtime which is helpful to collect more data
     result <- single_effect_regression(y, X, V)
   }
 })
